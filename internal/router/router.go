@@ -116,6 +116,10 @@ func (r *Router) Setup() *gin.Engine {
 		// Protected routes - require authentication
 		authMiddleware := middleware.AuthMiddleware(r.jwtService, r.userRepo)
 
+		// ✅ OPTIONAL AUTH MIDDLEWARE
+		optionalAuthMiddleware := middleware.OptionalAuthMiddleware(r.jwtService, r.userRepo)
+
+
 		// User profile routes
 		profile := api.Group("/profile")
 		profile.Use(authMiddleware)
@@ -174,10 +178,11 @@ func (r *Router) Setup() *gin.Engine {
 
 		// 👇 ADD THESE MEDIA ROUTES (PROTECTED & PUBLIC)
 		// Media routes - Public (list & detail)
-		mediaPublic := api.Group("/media")
+		mediaRead := api.Group("/media")
+		mediaRead.Use(optionalAuthMiddleware)  // ✅ Optional auth!
 		{
-			mediaPublic.GET("", r.mediaHandler.GetAll)
-			mediaPublic.GET("/:id", r.mediaHandler.GetByID)
+			mediaRead.GET("", r.mediaHandler.GetAll)
+			mediaRead.GET("/:id", r.mediaHandler.GetByID)
 		}
 
 		// Media routes - Protected (upload, update, delete)

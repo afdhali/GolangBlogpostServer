@@ -180,7 +180,7 @@ func (h *MediaHandler) GetAll(c *gin.Context) {
 		SortOrder:  sortOrder,
 	}
 
-	// 2. Ambil currentUser (bisa nil → public)
+	// ✅ 2. Extract currentUser dari context (bisa nil untuk public call)
 	var currentUser *entity.User
 	if userVal, exists := c.Get("user"); exists {
 		if u, ok := userVal.(*entity.User); ok && u != nil {
@@ -188,10 +188,10 @@ func (h *MediaHandler) GetAll(c *gin.Context) {
 		}
 	}
 
-	// 3. Panggil service dengan currentUser (bisa nil)
+	// 3. Panggil service dengan currentUser (bisa nil untuk public)
 	medias, total, err := h.mediaService.GetAll(c.Request.Context(), params, currentUser)
 	if err != nil {
-		// Jika error karena permission (hanya terjadi jika user biasa coba lihat punya orang)
+		// Permission error
 		if err.Error() == "you can only view your own media" {
 			response.Error(c, http.StatusForbidden, "Forbidden", err.Error())
 			return

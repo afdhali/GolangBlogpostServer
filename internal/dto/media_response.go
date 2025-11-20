@@ -39,6 +39,7 @@ type MediaListResponse struct {
 	Height       *int      `json:"height,omitempty"`
 	MediaType    string    `json:"media_type"`
 	PostID       *uuid.UUID `json:"post_id,omitempty"`
+	User         *MediaAuthor  `json:"user,omitempty"`
 	IsFeatured   bool      `json:"is_featured"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -93,7 +94,7 @@ func ToMediaResponse(media *entity.Media) *MediaResponse {
 }
 
 func ToMediaListResponse(media *entity.Media) *MediaListResponse {
-	return &MediaListResponse{
+	response := &MediaListResponse{
 		ID:           media.ID,
 		Filename:     media.Filename,
 		OriginalName: media.OriginalName,
@@ -107,6 +108,18 @@ func ToMediaListResponse(media *entity.Media) *MediaListResponse {
 		IsFeatured:   media.IsFeatured,
 		CreatedAt:    media.CreatedAt,
 	}
+
+	// ✅ TAMBAHKAN INI - Include user info
+	if media.User != nil {
+		response.User = &MediaAuthor{
+			ID:       media.User.ID,
+			Username: media.User.Username,
+			FullName: media.User.FullName,
+			Avatar:   media.User.Avatar,
+		}
+	}
+
+	return response
 }
 
 func ToMediaBasic(media *entity.Media) *MediaBasic {

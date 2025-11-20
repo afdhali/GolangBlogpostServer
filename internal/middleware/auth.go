@@ -70,3 +70,71 @@ func AuthMiddleware(jwtService security.JWTService, userRepo repository.UserRepo
         ctx.Next()
 	}
 }
+
+func OptionalAuthMiddleware(jwtService security.JWTService, userRepo repository.UserRepository) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authHeader := ctx.GetHeader("Authorization")
+		
+		// ✅ STEP 1: Jika tidak ada Authorization header → continue as public
+		if authHeader == "" {
+			// User tidak login, continue as public
+			ctx.Next()
+			return
+		}
+
+		// ✅ STEP 2: Parse Authorization header
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			// Invalid format tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		token := parts[1]
+
+		// ✅ STEP 3: Verify token
+		claims, err := jwtService.VerifyToken(token)
+		if err != nil {
+			// Token invalid/expired tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		// ✅ STEP 4: Extract user_id dari claims
+		userIDStr, ok := claims["user_id"].(string)
+		if !ok {
+			// Invalid token claims tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		userID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			// Invalid user ID tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		// ✅ STEP 5: Get user dari database
+		user, err := userRepo.FindByID(ctx.Request.Context(), userID)
+		if err != nil {
+			// User tidak ditemukan tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		// ✅ STEP 6: Check if user is active
+		if !user.IsActive {
+			// User inactive tapi jangan abort, lanjut as public
+			ctx.Next()
+			return
+		}
+
+		// ✅ STEP 7: User valid → set ke context (berbeda dengan public)
+		ctx.Set("user", user)
+		ctx.Set("user_id", user.ID)
+		ctx.Set("user_role", user.Role)
+
+		ctx.Next()
+	}
+}

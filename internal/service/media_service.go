@@ -177,28 +177,18 @@ func (s *mediaService) GetAll(
     // ---------- LOGIKA FILTER USER_ID BERDASARKAN ROLE ----------
     var effectiveUserID *uuid.UUID
 
-    if params.UserID != nil {
-        // Ada request filter berdasarkan user_id
-        if currentUser == nil {
-            // Public call, tetap pakai filter user_id yang diminta
-            effectiveUserID = params.UserID
-        } else if currentUser.IsAdmin() {
-            // Admin/SuperAdmin boleh melihat semua, jadi abaikan filter user_id yang dikirim
-            // (atau tetap pakai jika memang ingin filter spesifik user tertentu)
-            // Di sini kita pilih: admin tetap bisa filter per user, jadi pakai yang dikirim
-            effectiveUserID = params.UserID
-        } else {
-            // User biasa → wajib hanya boleh lihat milik sendiri
-            if *params.UserID != currentUser.ID {
-                return nil, 0, errors.New("you can only view your own media")
-            }
-            effectiveUserID = params.UserID // = currentUser.ID
+    if currentUser != nil && !currentUser.IsAdmin() {
+        // ✅ User biasa WAJIB hanya lihat media miliknya
+        // Abaikan params.UserID jika ada, ganti dengan currentUser.ID
+        if params.UserID != nil && *params.UserID != currentUser.ID {
+            return nil, 0, errors.New("you can only view your own media")
         }
-    } else if currentUser != nil && !currentUser.IsAdmin() {
-        // Tidak ada user_id di query, tapi user login adalah user biasa
-        // → otomatis filter hanya media miliknya
         effectiveUserID = &currentUser.ID
+    } else if params.UserID != nil {
+        // Admin atau public call - boleh filter per user_id
+        effectiveUserID = params.UserID
     }
+    // else: Public call tanpa user_id, atau admin tanpa filter â†' semua media
     // jika currentUser == nil (public) atau admin dan tidak ada user_id → effectiveUserID tetap nil (lihat semua)
 
     // ---------- PANGGIL REPOSITORY ----------
