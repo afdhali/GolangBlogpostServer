@@ -19,7 +19,8 @@ import (
 
 type MediaService interface {
 	Upload(ctx context.Context, userID uuid.UUID, file multipart.File, header *multipart.FileHeader, req *dto.UploadMediaRequest) (*dto.MediaResponse, error)
-	GetAll(ctx context.Context, params *dto.MediaQueryParams) ([]*dto.MediaListResponse, int64, error)
+	// GetAll(ctx context.Context, params *dto.MediaQueryParams) ([]*dto.MediaListResponse, int64, error)
+	GetAll(ctx context.Context, params *dto.MediaQueryParams, currentUser *entity.User) ([]*dto.MediaListResponse, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*dto.MediaResponse, error)
 	GetByPostID(ctx context.Context, postID uuid.UUID) ([]*dto.MediaResponse, error)
 	GetFeaturedByPostID(ctx context.Context, postID uuid.UUID) (*dto.MediaResponse, error)
@@ -126,30 +127,100 @@ func (s *mediaService) Upload(ctx context.Context, userID uuid.UUID, file multip
 	return dto.ToMediaResponse(media), nil
 }
 
-func (s *mediaService) GetAll(ctx context.Context, params *dto.MediaQueryParams) ([]*dto.MediaListResponse, int64, error) {
-	// Validate params
-	if err := s.validator.Validate(params); err != nil {
-		return nil, 0, fmt.Errorf("validation error: %w", err)
-	}
+// func (s *mediaService) GetAll(ctx context.Context, params *dto.MediaQueryParams) ([]*dto.MediaListResponse, int64, error) {
+// 	// Validate params
+// 	if err := s.validator.Validate(params); err != nil {
+// 		return nil, 0, fmt.Errorf("validation error: %w", err)
+// 	}
 
-	// Default pagination
-	if params.Page < 1 {
-		params.Page = 1
-	}
-	if params.Limit < 1 {
-		params.Limit = 10
-	}
+// 	// Default pagination
+// 	if params.Page < 1 {
+// 		params.Page = 1
+// 	}
+// 	if params.Limit < 1 {
+// 		params.Limit = 10
+// 	}
 
-	// Get medias
-	medias, total, err := s.mediaRepo.FindAll(ctx, params.Page, params.Limit, params.MediaType, params.PostID, params.UserID, params.IsFeatured, params.SortBy, params.SortOrder)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get medias: %w", err)
-	}
+// 	// Get medias
+// 	medias, total, err := s.mediaRepo.FindAll(ctx, params.Page, params.Limit, params.MediaType, params.PostID, params.UserID, params.IsFeatured, params.SortBy, params.SortOrder)
+// 	if err != nil {
+// 		return nil, 0, fmt.Errorf("failed to get medias: %w", err)
+// 	}
 
-	// Convert to response
-	responses := dto.ToMediaListResponses(medias)
+// 	// Convert to response
+// 	responses := dto.ToMediaListResponses(medias)
 
-	return responses, total, nil
+// 	return responses, total, nil
+// }
+
+func (s *mediaService) GetAll(
+    ctx context.Context,
+    params *dto.MediaQueryParams,
+    currentUser *entity.User, // bisa nil untuk public call
+) ([]*dto.MediaListResponse, int64, error) {
+    // Validate params
+    if err := s.validator.Validate(params); err != nil {
+        return nil, 0, fmt.Errorf("validation error: %w", err)
+    }
+
+    // Default pagination
+    if params.Page < 1 {
+        params.Page = 1
+    }
+    if params.Limit < 1 {
+        params.Limit = 10
+    }
+    if params.Limit > 100 {
+        params.Limit = 100
+    }
+
+    // ---------- LOGIKA FILTER USER_ID BERDASARKAN ROLE ----------
+    var effectiveUserID *uuid.UUID
+
+    if params.UserID != nil {
+        // Ada request filter berdasarkan user_id
+        if currentUser == nil {
+            // Public call, tetap pakai filter user_id yang diminta
+            effectiveUserID = params.UserID
+        } else if currentUser.IsAdmin() {
+            // Admin/SuperAdmin boleh melihat semua, jadi abaikan filter user_id yang dikirim
+            // (atau tetap pakai jika memang ingin filter spesifik user tertentu)
+            // Di sini kita pilih: admin tetap bisa filter per user, jadi pakai yang dikirim
+            effectiveUserID = params.UserID
+        } else {
+            // User biasa → wajib hanya boleh lihat milik sendiri
+            if *params.UserID != currentUser.ID {
+                return nil, 0, errors.New("you can only view your own media")
+            }
+            effectiveUserID = params.UserID // = currentUser.ID
+        }
+    } else if currentUser != nil && !currentUser.IsAdmin() {
+        // Tidak ada user_id di query, tapi user login adalah user biasa
+        // → otomatis filter hanya media miliknya
+        effectiveUserID = &currentUser.ID
+    }
+    // jika currentUser == nil (public) atau admin dan tidak ada user_id → effectiveUserID tetap nil (lihat semua)
+
+    // ---------- PANGGIL REPOSITORY ----------
+    medias, total, err := s.mediaRepo.FindAll(
+        ctx,
+        params.Page,
+        params.Limit,
+        params.MediaType,
+        params.PostID,
+        effectiveUserID,        // ← ini yang sudah di-adjust
+        params.IsFeatured,
+        params.SortBy,
+        params.SortOrder,
+    )
+    if err != nil {
+        return nil, 0, fmt.Errorf("failed to get medias: %w", err)
+    }
+
+    // Konversi ke response (User sudah di-preload di repository)
+    responses := dto.ToMediaListResponses(medias)
+
+    return responses, total, nil
 }
 
 func (s *mediaService) GetByID(ctx context.Context, id uuid.UUID) (*dto.MediaResponse, error) {

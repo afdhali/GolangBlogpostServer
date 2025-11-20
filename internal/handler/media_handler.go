@@ -76,13 +76,68 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 }
 
 // GetAll get all media with pagination and filters
+// func (h *MediaHandler) GetAll(c *gin.Context) {
+// 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+// 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+// 	mediaType := c.DefaultQuery("media_type", "")
+// 	sortBy := c.DefaultQuery("sort_by", "created_at")
+// 	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+// 	if page < 1 {
+// 		page = 1
+// 	}
+// 	if limit < 1 || limit > 100 {
+// 		limit = 10
+// 	}
+
+// 	// Parse optional UUID filters
+// 	var postID, userID *uuid.UUID
+// 	if postIDStr := c.Query("post_id"); postIDStr != "" {
+// 		if pID, err := uuid.Parse(postIDStr); err == nil {
+// 			postID = &pID
+// 		}
+// 	}
+// 	if userIDStr := c.Query("user_id"); userIDStr != "" {
+// 		if uID, err := uuid.Parse(userIDStr); err == nil {
+// 			userID = &uID
+// 		}
+// 	}
+
+// 	// Parse is_featured filter
+// 	var isFeatured *bool
+// 	if isFeaturedStr := c.Query("is_featured"); isFeaturedStr != "" {
+// 		if isFeaturedStr == "true" {
+// 			isFeatured = &[]bool{true}[0]
+// 		} else if isFeaturedStr == "false" {
+// 			isFeatured = &[]bool{false}[0]
+// 		}
+// 	}
+
+// 	params := &dto.MediaQueryParams{
+// 		Page:       page,
+// 		Limit:      limit,
+// 		MediaType:  mediaType,
+// 		PostID:     postID,
+// 		UserID:     userID,
+// 		IsFeatured: isFeatured,
+// 		SortBy:     sortBy,
+// 		SortOrder:  sortOrder,
+// 	}
+
+// 	medias, total, err := h.mediaService.GetAll(c.Request.Context(), params)
+// 	if err != nil {
+// 		response.Error(c, http.StatusInternalServerError, "Failed to get medias", err.Error())
+// 		return
+// 	}
+
+// 	response.SuccessWithPagination(c, http.StatusOK, page, limit, total, medias)
+// }
+
+// GetAll get all media with pagination and filters
 func (h *MediaHandler) GetAll(c *gin.Context) {
+	// 1. Parse query params seperti biasa
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	mediaType := c.DefaultQuery("media_type", "")
-	sortBy := c.DefaultQuery("sort_by", "created_at")
-	sortOrder := c.DefaultQuery("sort_order", "desc")
-
 	if page < 1 {
 		page = 1
 	}
@@ -90,7 +145,11 @@ func (h *MediaHandler) GetAll(c *gin.Context) {
 		limit = 10
 	}
 
-	// Parse optional UUID filters
+	mediaType := c.DefaultQuery("media_type", "")
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+	// Parse optional UUID
 	var postID, userID *uuid.UUID
 	if postIDStr := c.Query("post_id"); postIDStr != "" {
 		if pID, err := uuid.Parse(postIDStr); err == nil {
@@ -103,14 +162,11 @@ func (h *MediaHandler) GetAll(c *gin.Context) {
 		}
 	}
 
-	// Parse is_featured filter
+	// Parse is_featured
 	var isFeatured *bool
-	if isFeaturedStr := c.Query("is_featured"); isFeaturedStr != "" {
-		if isFeaturedStr == "true" {
-			isFeatured = &[]bool{true}[0]
-		} else if isFeaturedStr == "false" {
-			isFeatured = &[]bool{false}[0]
-		}
+	if val := c.Query("is_featured"); val != "" {
+		b := val == "true"
+		isFeatured = &b
 	}
 
 	params := &dto.MediaQueryParams{
@@ -124,8 +180,22 @@ func (h *MediaHandler) GetAll(c *gin.Context) {
 		SortOrder:  sortOrder,
 	}
 
-	medias, total, err := h.mediaService.GetAll(c.Request.Context(), params)
+	// 2. Ambil currentUser (bisa nil → public)
+	var currentUser *entity.User
+	if userVal, exists := c.Get("user"); exists {
+		if u, ok := userVal.(*entity.User); ok && u != nil {
+			currentUser = u
+		}
+	}
+
+	// 3. Panggil service dengan currentUser (bisa nil)
+	medias, total, err := h.mediaService.GetAll(c.Request.Context(), params, currentUser)
 	if err != nil {
+		// Jika error karena permission (hanya terjadi jika user biasa coba lihat punya orang)
+		if err.Error() == "you can only view your own media" {
+			response.Error(c, http.StatusForbidden, "Forbidden", err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, "Failed to get medias", err.Error())
 		return
 	}
