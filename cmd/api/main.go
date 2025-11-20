@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	// test update init
 	// Initialize application with dependency injection
 	app, err := di.InitializeApp()
 	if err != nil {
