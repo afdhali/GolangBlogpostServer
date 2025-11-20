@@ -1,0 +1,6 @@
+.env
+database/migrations/*
+apispecs.json
+postgres-deploy.sh
+uploads/*
+logs/*
