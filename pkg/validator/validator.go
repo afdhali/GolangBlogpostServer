@@ -13,8 +13,9 @@ type CustomValidator struct {
 func NewValidator() *CustomValidator {
 	v := validator.New()
 
-	// Daftarkan custom validation untuk username
+	// Daftarkan custom validation untuk username & slug
 	v.RegisterValidation("username", validateUsername)
+	v.RegisterValidation("slug", validateSlug)
 
 	return &CustomValidator{
 		validator: v,
@@ -55,6 +56,12 @@ func validateUsername(fl validator.FieldLevel) bool {
 	return true
 }
 
+func validateSlug(fl validator.FieldLevel) bool {
+	slug := fl.Field().String()
+	matched, _ := regexp.MatchString(`^[a-z0-9]+(?:-[a-z0-9]+)*$`, slug)
+	return matched
+}
+
 // === Update getErrorMessage untuk menangani 'username' ===
 func getErrorMessage(e validator.FieldError) string {
 	switch e.Tag() {
@@ -76,6 +83,8 @@ func getErrorMessage(e validator.FieldError) string {
 		return e.Field() + " must be a valid URL"
 	case "username":
 		return e.Field() + " can only contain letters, numbers, and single dots/underscores (not at start/end)"
+	case "slug":
+		return e.Field() + " must be lowercase letters, numbers, and hyphens only"
 	default:
 		return e.Field() + " is invalid"
 	}

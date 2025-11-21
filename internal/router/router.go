@@ -96,8 +96,15 @@ func (r *Router) Setup() *gin.Engine {
 			categories.GET("/slug/:slug", r.categoryHandler.GetBySlug)
 		}
 
-		// Public routes - Posts (read only)
+		// Protected routes - require authentication
+		authMiddleware := middleware.AuthMiddleware(r.jwtService, r.userRepo)
+
+		// ✅ OPTIONAL AUTH MIDDLEWARE
+		optionalAuthMiddleware := middleware.OptionalAuthMiddleware(r.jwtService, r.userRepo)
+
+		// Public routes - Posts (read only) with optional auth
 		posts := api.Group("/posts")
+		posts.Use(optionalAuthMiddleware)
 		{
 			posts.GET("", r.postHandler.GetAll)
 			posts.GET("/slug/:slug", r.postHandler.GetBySlug)
@@ -107,19 +114,12 @@ func (r *Router) Setup() *gin.Engine {
 			// Comments for specific post
 			posts.GET("/:id/comments", r.commentHandler.GetByPostID)
 
-			// 👇 ADD THESE MEDIA ROUTES (PUBLIC)
+			// ðŸ'‡ ADD THESE MEDIA ROUTES (PUBLIC)
 			// Get all media for a post (use :id not :postId to avoid conflicts)
 			posts.GET("/:id/media", r.mediaHandler.GetByPostID)
 			// Get featured media for a post
 			posts.GET("/:id/media/featured", r.mediaHandler.GetFeaturedByPostID)
 		}
-
-		// Protected routes - require authentication
-		authMiddleware := middleware.AuthMiddleware(r.jwtService, r.userRepo)
-
-		// ✅ OPTIONAL AUTH MIDDLEWARE
-		optionalAuthMiddleware := middleware.OptionalAuthMiddleware(r.jwtService, r.userRepo)
-
 
 		// User profile routes
 		profile := api.Group("/profile")
@@ -177,7 +177,7 @@ func (r *Router) Setup() *gin.Engine {
 			comments.DELETE("/:commentId", r.commentHandler.Delete)
 		}
 
-		// 👇 ADD THESE MEDIA ROUTES (PROTECTED & PUBLIC)
+		// ðŸ'‡ ADD THESE MEDIA ROUTES (PROTECTED & PUBLIC)
 		// Media routes - Public (list & detail)
 		mediaRead := api.Group("/media")
 		mediaRead.Use(optionalAuthMiddleware)  // ✅ Optional auth!

@@ -21,6 +21,56 @@ func NewPostHandler(postService service.PostService) *PostHandler {
 }
 
 // GetAll get all posts with pagination and filters
+// func (h *PostHandler) GetAll(c *gin.Context) {
+// 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+// 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+// 	search := c.DefaultQuery("search", "")
+// 	status := c.DefaultQuery("status", "")
+// 	sortBy := c.DefaultQuery("sort_by", "created_at")
+// 	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+// 	if page < 1 {
+// 		page = 1
+// 	}
+// 	if limit < 1 || limit > 100 {
+// 		limit = 10
+// 	}
+
+// 	// Parse optional UUID filters
+// 	var categoryID, authorID *uuid.UUID
+// 	if categoryIDStr := c.Query("category_id"); categoryIDStr != "" {
+// 		if cID, err := uuid.Parse(categoryIDStr); err == nil {
+// 			categoryID = &cID
+// 		}
+// 	}
+// 	if authorIDStr := c.Query("author_id"); authorIDStr != "" {
+// 		if aID, err := uuid.Parse(authorIDStr); err == nil {
+// 			authorID = &aID
+// 		}
+// 	}
+
+// 	params := &dto.PostQueryParams{
+// 		Page:       page,
+// 		Limit:      limit,
+// 		Search:     search,
+// 		Status:     status,
+// 		CategoryID: categoryID,
+// 		AuthorID:   authorID,
+// 		Tag:        c.DefaultQuery("tag", ""),
+// 		SortBy:     sortBy,
+// 		SortOrder:  sortOrder,
+// 	}
+
+// 	posts, total, err := h.postService.GetAll(c.Request.Context(), params)
+// 	if err != nil {
+// 		response.Error(c, http.StatusInternalServerError, "Failed to get posts", err.Error())
+// 		return
+// 	}
+
+// 	response.SuccessWithPagination(c, http.StatusOK, page, limit, total, posts)
+// }
+
+// GetAll get all posts with pagination and filters
 func (h *PostHandler) GetAll(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -49,6 +99,15 @@ func (h *PostHandler) GetAll(c *gin.Context) {
 		}
 	}
 
+	// ✅ Extract current user from context (optional)
+	var currentUser *entity.User
+	userValue, exists := c.Get("user")
+	if exists {
+		if user, ok := userValue.(*entity.User); ok {
+			currentUser = user
+		}
+	}
+
 	params := &dto.PostQueryParams{
 		Page:       page,
 		Limit:      limit,
@@ -61,7 +120,7 @@ func (h *PostHandler) GetAll(c *gin.Context) {
 		SortOrder:  sortOrder,
 	}
 
-	posts, total, err := h.postService.GetAll(c.Request.Context(), params)
+	posts, total, err := h.postService.GetAll(c.Request.Context(), params, currentUser)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to get posts", err.Error())
 		return

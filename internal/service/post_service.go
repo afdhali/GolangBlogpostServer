@@ -15,7 +15,8 @@ import (
 )
 
 type PostService interface {
-	GetAll(ctx context.Context, params *dto.PostQueryParams) ([]*dto.PostListResponse, int64, error)
+	// GetAll(ctx context.Context, params *dto.PostQueryParams) ([]*dto.PostListResponse, int64, error)
+	GetAll(ctx context.Context, params *dto.PostQueryParams, currentUser *entity.User) ([]*dto.PostListResponse, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*dto.PostResponse, error)
 	GetBySlug(ctx context.Context, slug string) (*dto.PostResponse, error)
 	Create(ctx context.Context, req *dto.CreatePostRequest, userID uuid.UUID) (*dto.PostResponse, error)
@@ -50,7 +51,48 @@ func NewPostService(
 	}
 }
 
-func (s *postService) GetAll(ctx context.Context, params *dto.PostQueryParams) ([]*dto.PostListResponse, int64, error) {
+// func (s *postService) GetAll(ctx context.Context, params *dto.PostQueryParams) ([]*dto.PostListResponse, int64, error) {
+// 	// Validate params
+// 	if err := s.validator.Validate(params); err != nil {
+// 		return nil, 0, fmt.Errorf("validation error: %w", err)
+// 	}
+
+// 	// Default pagination
+// 	if params.Page < 1 {
+// 		params.Page = 1
+// 	}
+// 	if params.Limit < 1 {
+// 		params.Limit = 10
+// 	}
+
+// 	// Get posts
+// 	posts, total, err := s.postRepo.FindAll(ctx, params.Page, params.Limit, params.Search, params.Status, params.CategoryID, params.Tag, params.AuthorID, params.SortBy, params.SortOrder)
+// 	if err != nil {
+// 		return nil, 0, fmt.Errorf("failed to get posts: %w", err)
+// 	}
+
+// 	// Bulk count comments for all posts
+// 	postIDs := make([]uuid.UUID, len(posts))
+// 	for i, post := range posts {
+// 		postIDs[i] = post.ID
+// 	}
+
+// 	commentCounts, err := s.commentRepo.CountByPostIDs(ctx, postIDs)
+// 	if err != nil {
+// 		return nil, 0, fmt.Errorf("failed to count comments: %w", err)
+// 	}
+
+// 	// Convert to response with comment counts
+// 	responses := make([]*dto.PostListResponse, len(posts))
+// 	for i, post := range posts {
+// 		commentCount := commentCounts[post.ID]
+// 		responses[i] = dto.ToPostListResponse(post, commentCount)
+// 	}
+
+// 	return responses, total, nil
+// }
+
+func (s *postService) GetAll(ctx context.Context, params *dto.PostQueryParams, currentUser *entity.User) ([]*dto.PostListResponse, int64, error) {
 	// Validate params
 	if err := s.validator.Validate(params); err != nil {
 		return nil, 0, fmt.Errorf("validation error: %w", err)
@@ -70,9 +112,32 @@ func (s *postService) GetAll(ctx context.Context, params *dto.PostQueryParams) (
 		return nil, 0, fmt.Errorf("failed to get posts: %w", err)
 	}
 
+	// ✅ Filter posts based on user role
+	var filteredPosts []*entity.Post
+	if currentUser != nil && !currentUser.IsAdmin() {
+		// Non-admin user: show published posts + own draft/archived posts
+		for _, post := range posts {
+			// Show published posts from anyone
+			if post.Status == entity.PostStatusPublished {
+				filteredPosts = append(filteredPosts, post)
+				continue
+			}
+			// Show own draft/archived posts
+			if post.AuthorID == currentUser.ID {
+				filteredPosts = append(filteredPosts, post)
+				continue
+			}
+		}
+		// Update total count after filtering
+		total = int64(len(filteredPosts))
+	} else {
+		// Admin/SuperAdmin or public user: show all posts
+		filteredPosts = posts
+	}
+
 	// Bulk count comments for all posts
-	postIDs := make([]uuid.UUID, len(posts))
-	for i, post := range posts {
+	postIDs := make([]uuid.UUID, len(filteredPosts))
+	for i, post := range filteredPosts {
 		postIDs[i] = post.ID
 	}
 
@@ -82,8 +147,8 @@ func (s *postService) GetAll(ctx context.Context, params *dto.PostQueryParams) (
 	}
 
 	// Convert to response with comment counts
-	responses := make([]*dto.PostListResponse, len(posts))
-	for i, post := range posts {
+	responses := make([]*dto.PostListResponse, len(filteredPosts))
+	for i, post := range filteredPosts {
 		commentCount := commentCounts[post.ID]
 		responses[i] = dto.ToPostListResponse(post, commentCount)
 	}
