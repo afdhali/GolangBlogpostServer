@@ -59,9 +59,10 @@ func (r *Router) Setup() *gin.Engine {
 
 	// Global middlewares
 	router.Use(gin.Recovery())
+	router.Use(middleware.LoggerMiddleware(r.logger))      // Log semua request
+	router.Use(middleware.ErrorHandler(r.logger))          // Log semua error dengan detail
 	router.Use(middleware.CORSMiddleware(r.cfg))
 	router.Use(middleware.SecurityHeadersMiddleware())
-	router.Use(middleware.ErrorHandler())
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

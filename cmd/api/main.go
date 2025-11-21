@@ -14,13 +14,14 @@ import (
 )
 
 func main() {
-	// test update init
 	// Initialize application with dependency injection
 	app, err := di.InitializeApp()
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
-	defer app.Cleanup()
+
+	// Get logger from app
+	logger := app.GetLogger()
 
 	// Get configuration from router (already injected)
 	port := os.Getenv("APP_PORT")
@@ -39,12 +40,13 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("🚀 Server starting on port %s", port)
-		log.Printf("🌍 Environment: %s", os.Getenv("APP_ENV"))
-		log.Printf("🔗 API: http://localhost:%s/api/v1", port)
-		log.Printf("❤️  Health: http://localhost:%s/health", port)
-		
+		logger.Info("🚀 Server starting on port %s", port)
+		logger.Info("🌍 Environment: %s", os.Getenv("APP_ENV"))
+		logger.Info("📍 API: http://localhost:%s/api/v1", port)
+		logger.Info("❤️  Health: http://localhost:%s/health", port)
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("Failed to start server: %v", err)
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
@@ -54,7 +56,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("🛑 Shutting down server...")
+	logger.Info("🛑 Shutting down server...")
 
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -62,8 +64,20 @@ func main() {
 
 	// Attempt graceful shutdown
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("⚠️  Server forced to shutdown: %v", err)
+		logger.Error("⚠️  Server forced to shutdown: %v", err)
 	}
 
-	log.Println("✅ Server exited gracefully")
+	logger.Info("✅ Server exited gracefully")
+
+	// PENTING: Beri waktu untuk logger menulis semua pesan sebelum close
+	// dan close logger TERAKHIR sebelum program exit
+	time.Sleep(1 * time.Second)
+
+	// Cleanup (cleanup logger TERAKHIR!)
+	app.Cleanup()
+
+	// Beri waktu lagi untuk memastikan semua di-flush
+	time.Sleep(500 * time.Millisecond)
+
+	logger.Info("👋 Application stopped")
 }

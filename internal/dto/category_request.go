@@ -2,13 +2,11 @@ package dto
 
 type CreateCategoryRequest struct {
 	Name        string `json:"name" validate:"required,min=2,max=100"`
-	Slug        string `json:"slug" validate:"required,min=2,max=100,slug"`
 	Description string `json:"description" validate:"omitempty,max=500"`
 }
 
 type UpdateCategoryRequest struct {
 	Name        string `json:"name" validate:"omitempty,min=2,max=100"`
-	Slug        string `json:"slug" validate:"omitempty,min=2,max=100,slug"`
 	Description string `json:"description" validate:"omitempty,max=500"`
 }
 

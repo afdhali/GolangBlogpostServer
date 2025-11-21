@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/afdhali/GolangBlogpostServer/internal/dto"
 	"github.com/afdhali/GolangBlogpostServer/internal/entity"
@@ -36,6 +38,57 @@ func NewCategoryService(
 		categoryRepo: categoryRepo,
 		postRepo:     postRepo,
 		validator:    validator,
+	}
+}
+
+// generateSlug creates a URL-friendly slug from the given name
+func (s *categoryService) generateSlug(name string) string {
+	// Convert to lowercase
+	slug := strings.ToLower(name)
+	
+	// Replace spaces and underscores with hyphens
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = strings.ReplaceAll(slug, "_", "-")
+	
+	// Remove all non-alphanumeric characters except hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]+`)
+	slug = reg.ReplaceAllString(slug, "")
+	
+	// Replace multiple consecutive hyphens with single hyphen
+	reg = regexp.MustCompile(`-+`)
+	slug = reg.ReplaceAllString(slug, "-")
+	
+	// Trim hyphens from start and end
+	slug = strings.Trim(slug, "-")
+	
+	return slug
+}
+
+// ensureUniqueSlug checks if slug exists and appends number if needed
+func (s *categoryService) ensureUniqueSlug(ctx context.Context, baseSlug string, excludeID *uuid.UUID) (string, error) {
+	slug := baseSlug
+	counter := 1
+	
+	for {
+		existing, err := s.categoryRepo.FindBySlug(ctx, slug)
+		if err != nil {
+			// Slug not found, it's available
+			return slug, nil
+		}
+		
+		// If we're updating and the slug belongs to the same category, it's ok
+		if excludeID != nil && existing.ID == *excludeID {
+			return slug, nil
+		}
+		
+		// Slug exists, try with number suffix
+		slug = fmt.Sprintf("%s-%d", baseSlug, counter)
+		counter++
+		
+		// Prevent infinite loop
+		if counter > 100 {
+			return "", errors.New("unable to generate unique slug")
+		}
 	}
 }
 
@@ -116,16 +169,19 @@ func (s *categoryService) Create(ctx context.Context, req *dto.CreateCategoryReq
 		return nil, fmt.Errorf("validation error: %w", err)
 	}
 
-	// Check if slug exists
-	existingCategory, _ := s.categoryRepo.FindBySlug(ctx, req.Slug)
-	if existingCategory != nil {
-		return nil, errors.New("slug already exists")
+	// Generate slug from name
+	baseSlug := s.generateSlug(req.Name)
+	
+	// Ensure slug is unique
+	slug, err := s.ensureUniqueSlug(ctx, baseSlug, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create category
 	category := &entity.Category{
 		Name:        req.Name,
-		Slug:        req.Slug,
+		Slug:        slug,
 		Description: req.Description,
 	}
 
@@ -158,18 +214,17 @@ func (s *categoryService) Update(ctx context.Context, id uuid.UUID, req *dto.Upd
 		return nil, errors.New("you don't have permission to update category")
 	}
 
-	// Check slug uniqueness if changed
-	if req.Slug != "" && req.Slug != category.Slug {
-		existingCategory, _ := s.categoryRepo.FindBySlug(ctx, req.Slug)
-		if existingCategory != nil && existingCategory.ID != category.ID {
-			return nil, errors.New("slug already exists")
-		}
-		category.Slug = req.Slug
-	}
-
 	// Update fields
 	if req.Name != "" {
 		category.Name = req.Name
+		
+		// Regenerate slug from new name
+		baseSlug := s.generateSlug(req.Name)
+		newSlug, err := s.ensureUniqueSlug(ctx, baseSlug, &category.ID)
+		if err != nil {
+			return nil, err
+		}
+		category.Slug = newSlug
 	}
 
 	if req.Description != "" {

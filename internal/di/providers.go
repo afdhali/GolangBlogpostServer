@@ -22,16 +22,26 @@ type AppContainer struct {
 	logger *logger.Logger
 }
 
+// GetLogger returns the logger instance
+func (c *AppContainer) GetLogger() *logger.Logger {
+	return c.logger
+}
+
 // Cleanup performs graceful shutdown
+// PENTING: Urutan cleanup SANGAT PENTING!
+// 1. Logger HARUS di-close PALING AKHIR
+// 2. Database di-close sebelum logger
 func (c *AppContainer) Cleanup() {
-	// Close database connection
+	// 1. Close database connection TERLEBIH DAHULU
 	if c.db != nil {
 		if sqlDB, err := c.db.DB(); err == nil {
+			// Optional: bisa log
 			sqlDB.Close()
 		}
 	}
 
-	// Close logger
+	// 2. Close logger TERAKHIR
+	// Ini memastikan semua log messages di-flush sebelum file di-close
 	if c.logger != nil {
 		c.logger.Close()
 	}
@@ -228,7 +238,7 @@ func ProvideRouter(
 	categoryHandler *handler.CategoryHandler,
 	postHandler *handler.PostHandler,
 	commentHandler *handler.CommentHandler,
-	mediaHandler *handler.MediaHandler, 
+	mediaHandler *handler.MediaHandler,
 ) *router.Router {
 	return router.NewRouter(
 		cfg,
@@ -240,7 +250,7 @@ func ProvideRouter(
 		categoryHandler,
 		postHandler,
 		commentHandler,
-		mediaHandler, 
+		mediaHandler,
 	)
 }
 
